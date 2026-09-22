@@ -1,6 +1,6 @@
 -- =========================================================
--- DOEAK FRUIT SNIPER v4
--- Scan Workspace.Fruit + GetFruitData remote
+-- DOEAK FRUIT SNIPER v5
+-- Auto-reload sau hop • Verify sea • Scan Workspace.Fruit
 -- =========================================================
 
 local Players           = game:GetService("Players")
@@ -14,11 +14,49 @@ local CoreGui           = game:GetService("CoreGui")
 
 local LP = Players.LocalPlayer
 
--- ===== CONFIG =====
-local SCRIPT_URL = "https://raw.githubusercontent.com/idkshdcs/DoeakHub_UILib/main/DoeakFruitSniper.lua"
-local FLY_SPEED  = 170
+-- =========================================================
+-- ⭐ AUTO-RELOAD (2-3 dòng, gọn như script khác)
+-- =========================================================
+local SCRIPT_URL = "https://raw.githubusercontent.com/idkshdcs/doeak_hub-kaitun/main/DoeakFruitSniper.lua"
 
--- ===== PARENT =====
+local function queueReload()
+    local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
+    if q then
+        pcall(function()
+            q('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
+        end)
+        print("[SNIPER] ✅ Đã queue script reload sau hop")
+    end
+end
+
+-- =========================================================
+-- ⭐ VERIFY SEA (chỉ chạy trên Blox Fruit)
+-- =========================================================
+local VALID_SEAS = {
+    [2753915549] = "Sea 1",
+    [4442272183] = "Sea 2",
+    [7449423635] = "Sea 3",
+}
+
+local currentSea = VALID_SEAS[game.PlaceId]
+if not currentSea then
+    warn("[SNIPER] ❌ Không phải Blox Fruit! PlaceId:", game.PlaceId)
+    return
+end
+
+print("[SNIPER] ✅ Sea:", currentSea, "| PlaceId:", game.PlaceId)
+
+-- Queue reload ngay khi vào server (cho lần hop tiếp theo)
+queueReload()
+
+-- =========================================================
+-- CONFIG
+-- =========================================================
+local FLY_SPEED = 170
+
+-- =========================================================
+-- PARENT
+-- =========================================================
 local function getSafeParent()
     local ok, hui = pcall(function() return gethui and gethui() end)
     if ok and hui then return hui end
@@ -29,7 +67,9 @@ local UIParent = getSafeParent()
 local old = UIParent:FindFirstChild("DoeakFruitUI")
 if old then old:Destroy() end
 
--- ===== COLORS =====
+-- =========================================================
+-- COLORS
+-- =========================================================
 local C = {
     Surface = Color3.fromRGB(22, 22, 26),
     Card    = Color3.fromRGB(40, 40, 46),
@@ -61,20 +101,26 @@ local function tween(o, t, props)
     TweenService:Create(o, TweenInfo.new(t), props):Play()
 end
 
--- ===== REMOTES =====
+-- =========================================================
+-- REMOTES
+-- =========================================================
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
 local CommF_ = Remotes and Remotes:FindFirstChild("CommF_")
 local GetFruitData = Remotes and Remotes:FindFirstChild("GetFruitData")
 
 print("[SNIPER] Remotes:", CommF_ and "OK" or "NIL", GetFruitData and "OK" or "NIL")
 
--- ===== STATE =====
+-- =========================================================
+-- STATE
+-- =========================================================
 local autoSnipe = true
 local hopCount = 0
 local fruitFound = 0
 local isHopping = false
 
--- ===== TEAM =====
+-- =========================================================
+-- TEAM (chỉ join nếu chưa ở Pirates)
+-- =========================================================
 local function isInPirates()
     if not LP.Team then return false end
     local n = LP.Team.Name:lower()
@@ -90,7 +136,9 @@ task.spawn(function()
     end
 end)
 
--- ===== NOCLIP =====
+-- =========================================================
+-- NOCLIP
+-- =========================================================
 task.spawn(function()
     while true do
         if LP.Character then
@@ -104,7 +152,9 @@ task.spawn(function()
     end
 end)
 
--- ===== UI =====
+-- =========================================================
+-- UI
+-- =========================================================
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "DoeakFruitUI"
 Gui.ResetOnSpawn = false
@@ -137,7 +187,7 @@ local MHTitle = Instance.new("TextLabel")
 MHTitle.Size = UDim2.new(1, -20, 0, 22)
 MHTitle.Position = UDim2.new(0, 12, 0, 8)
 MHTitle.BackgroundTransparency = 1
-MHTitle.Text = "🍎 DOEAK FRUIT SNIPER v4"
+MHTitle.Text = "🍎 DOEAK FRUIT SNIPER v5"
 MHTitle.TextColor3 = C.Text
 MHTitle.Font = Enum.Font.GothamBold
 MHTitle.TextSize = 15
@@ -148,7 +198,7 @@ local MHSub = Instance.new("TextLabel")
 MHSub.Size = UDim2.new(1, -20, 0, 14)
 MHSub.Position = UDim2.new(0, 12, 0, 32)
 MHSub.BackgroundTransparency = 1
-MHSub.Text = "Scan Workspace.Fruit • Auto hop sau khi nhặt"
+MHSub.Text = "Auto-reload sau hop • Verify sea: " .. currentSea
 MHSub.TextColor3 = C.Sub
 MHSub.Font = Enum.Font.Gotham
 MHSub.TextSize = 10
@@ -259,7 +309,9 @@ StatsLbl.TextSize = 11
 StatsLbl.TextXAlignment = Enum.TextXAlignment.Left
 StatsLbl.Parent = StatsFrame
 
--- ===== FRUIT DETECTION =====
+-- =========================================================
+-- FRUIT DETECTION
+-- =========================================================
 local FRUIT_NAMES = {
     "Rocket","Spin","Chop","Spring","Bomb","Smoke","Spike","Flame","Falcon",
     "Ice","Sand","Dark","Diamond","Light","Rubber","Barrier","Ghost","Magma",
@@ -277,12 +329,10 @@ local function isFruitName(n)
 end
 
 local function isFruit(obj)
-    -- Fruit có thể là Tool, Model, MeshPart, hoặc Part
     if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
         return isFruitName(obj.Name)
     end
     if obj:IsA("Model") then
-        -- Check tên model hoặc con của nó
         if isFruitName(obj.Name) then return true end
         for _, child in ipairs(obj:GetChildren()) do
             if child:IsA("MeshPart") or child:IsA("Part") then
@@ -316,7 +366,6 @@ local function getFruits()
     local myHRP = LP.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return result end
 
-    -- Scan Workspace.Fruit (quan trọng - từ log của bạn)
     local fruitFolder = Workspace:FindFirstChild("Fruit")
     if fruitFolder then
         for _, obj in ipairs(fruitFolder:GetChildren()) do
@@ -333,7 +382,6 @@ local function getFruits()
         end
     end
 
-    -- Scan Workspace trực tiếp (fallback)
     for _, obj in ipairs(Workspace:GetChildren()) do
         if isFruit(obj) and obj.Parent ~= fruitFolder then
             local part, pos = getFruitPosition(obj)
@@ -351,7 +399,9 @@ local function getFruits()
     return result
 end
 
--- ===== FLY =====
+-- =========================================================
+-- FLY
+-- =========================================================
 local function flyTo(targetPos, dt)
     if not LP.Character then return false end
     local hrp = LP.Character:FindFirstChild("HumanoidRootPart")
@@ -369,21 +419,17 @@ local function flyTo(targetPos, dt)
     return false
 end
 
--- ===== HOP =====
+-- =========================================================
+-- HOP
+-- =========================================================
 local function hopServer()
     if isHopping then return end
     isHopping = true
 
     print("[SNIPER] Hop server...")
 
-    -- Queue load lại script
-    local queueFunc = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
-    if queueFunc then
-        pcall(function()
-            queueFunc('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
-        end)
-        print("[SNIPER] Đã queue script reload")
-    end
+    -- Queue reload trước khi hop
+    queueReload()
 
     -- Tìm server
     local servers
@@ -415,7 +461,9 @@ local function hopServer()
     pcall(function() TeleportService:Teleport(game.PlaceId, LP) end)
 end
 
--- ===== MAIN LOOP =====
+-- =========================================================
+-- MAIN LOOP
+-- =========================================================
 local lastLog = 0
 
 RunService.Heartbeat:Connect(function(dt)
@@ -427,7 +475,6 @@ RunService.Heartbeat:Connect(function(dt)
 
     local fruits = getFruits()
 
-    -- Log mỗi 2s
     local now = tick()
     if now - lastLog >= 2 then
         lastLog = now
@@ -472,12 +519,14 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Notify
+-- =========================================================
+-- NOTIFY
+-- =========================================================
 local note = Instance.new("TextLabel")
 note.Size = UDim2.new(0, 320, 0, 40)
 note.Position = UDim2.new(0.5, -160, 0, 40)
 note.BackgroundColor3 = C.Card
-note.Text = "  ✅ Fruit Sniper v4 loaded"
+note.Text = "  ✅ Fruit Sniper v5 loaded — " .. currentSea
 note.TextColor3 = C.Green
 note.Font = Enum.Font.GothamBold
 note.TextSize = 12
@@ -490,4 +539,4 @@ task.delay(3, function()
     task.wait(0.5); note:Destroy()
 end)
 
-print("[SNIPER] Loaded | Sea PlaceId:", game.PlaceId)
+print("[SNIPER] ✅ Loaded | Sea:", currentSea, "| PlaceId:", game.PlaceId)
