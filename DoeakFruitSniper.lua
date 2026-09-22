@@ -1,15 +1,11 @@
 -- =========================================================
--- DOEAK - KAITUN FRUIT v8
--- Fix LocalPlayer nil • Full workspace scan • Smart hop
+-- DOEAK - KAITUN FRUIT v9
+-- Fix lỗi 773 • Hop dùng main place ID đúng sea
 -- =========================================================
 
--- ⭐ CHỜ PLAYER LOAD XONG (fix lỗi Character nil)
 local Players = game:GetService("Players")
 local LP
-repeat
-    LP = Players.LocalPlayer
-    task.wait(0.1)
-until LP ~= nil
+repeat LP = Players.LocalPlayer; task.wait(0.1) until LP ~= nil
 
 local RunService        = game:GetService("RunService")
 local TeleportService   = game:GetService("TeleportService")
@@ -19,7 +15,6 @@ local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui           = game:GetService("CoreGui")
 
--- Chờ character load
 repeat task.wait(0.1) until LP.Character ~= nil
 
 local SCRIPT_URL  = "https://raw.githubusercontent.com/idkshdcs/doeak_hub-kaitun/main/DoeakFruitSniper.lua"
@@ -28,12 +23,65 @@ local HOP_TIMEOUT = 20
 local KEY_FILE    = "doeak_key.txt"
 local SESSION     = 24 * 3600
 
+-- ⭐ MAIN PLACE IDs (không phải sub-place)
+local MAIN_PLACES = {
+    Sea1 = 2753915549,
+    Sea2 = 4442272183,
+    Sea3 = 7449423635,
+}
+
 local VALID_KEYS = {
     ["DOEAK-VIP-2026"]   = true,
     ["KAITUN-FREE-2026"] = true,
     ["DOEAK-KAITUN"]     = true,
     ["FREE-2026"]        = true,
 }
+
+-- =========================================================
+-- ⭐ DETECT SEA (chỉ để pick main place ID khi hop)
+-- Không phải verify — nếu detect fail vẫn chạy
+-- =========================================================
+local function detectSea()
+    -- Nếu placeId là main → xác định luôn
+    if game.PlaceId == MAIN_PLACES.Sea1 then return MAIN_PLACES.Sea1 end
+    if game.PlaceId == MAIN_PLACES.Sea2 then return MAIN_PLACES.Sea2 end
+    if game.PlaceId == MAIN_PLACES.Sea3 then return MAIN_PLACES.Sea3 end
+
+    -- Nếu là sub-place → detect qua NPC / Island
+    local npcs = Workspace:FindFirstChild("NPCs")
+    if npcs then
+        local has = {}
+        for _, n in ipairs(npcs:GetChildren()) do
+            has[n.Name:lower()] = true
+        end
+        if has["hydra"] or has["cursed ship"] or has["haunted castle"] then
+            return MAIN_PLACES.Sea3
+        end
+        if has["cafe"] and has["graveyard"] then
+            return MAIN_PLACES.Sea2
+        end
+    end
+
+    local map = Workspace:FindFirstChild("Map")
+    if map then
+        local islands = {}
+        for _, c in ipairs(map:GetChildren()) do
+            islands[c.Name:lower()] = true
+        end
+        if islands["castle on the sea"] or islands["haunted castle"] then
+            return MAIN_PLACES.Sea3
+        end
+        if islands["cursed ship"] or islands["graveyard"] or islands["kingdom of rose"] then
+            return MAIN_PLACES.Sea2
+        end
+    end
+
+    -- Fallback: mặc định Sea 1
+    return MAIN_PLACES.Sea1
+end
+
+local MAIN_PLACE_ID = detectSea()
+print("[DOEAK] Current PlaceId:", game.PlaceId, "| Main:", MAIN_PLACE_ID)
 
 -- =========================================================
 -- KEY FILE
@@ -45,7 +93,6 @@ local function readKeyFile()
     if not k then return nil, 0 end
     return k, tonumber(e) or 0
 end
-
 local function writeKeyFile(k, e)
     pcall(writefile, KEY_FILE, k .. "|" .. tostring(e))
 end
@@ -198,11 +245,10 @@ local function showKeyUI()
         end
         if VALID_KEYS[entered] then
             writeKeyFile(entered, os.time() + SESSION)
-            Status.Text = "✅ OK — khởi động..."
+            Status.Text = "✅ OK"
             Status.TextColor3 = C.Green
             task.wait(0.8)
             Gui:Destroy()
-            -- queue reload
             local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
             if q then
                 pcall(function()
@@ -226,13 +272,13 @@ local function startMain()
     local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
     local CommF_ = Remotes and Remotes:FindFirstChild("CommF_")
 
-    -- Stats persist qua các server
     local genv = getgenv and getgenv() or _G
     if not genv.DoeakStats then
         genv.DoeakStats = {hops = 0, fruits = 0}
     end
     local stats = genv.DoeakStats
 
+    -- ⭐ QUEUE RELOAD với main place id
     local function queueReload()
         local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
         if q then
@@ -272,7 +318,7 @@ local function startMain()
         end
     end)
 
-    -- ================ UI ================
+    -- UI
     local Gui = Instance.new("ScreenGui")
     Gui.Name = "DoeakMainUI"
     Gui.ResetOnSpawn = false
@@ -341,7 +387,6 @@ local function startMain()
     local vTime  = makeRow(110, "Time:")
     local vKey   = makeRow(136, "Key:")
 
-    -- Status
     local vStatus = Instance.new("TextLabel")
     vStatus.Size = UDim2.new(1, -28, 0, 18)
     vStatus.Position = UDim2.new(0, 14, 0, 162)
@@ -353,7 +398,7 @@ local function startMain()
     vStatus.TextXAlignment = Enum.TextXAlignment.Center
     vStatus.Parent = Main
 
-    -- ================ FRUIT SCAN (FULL WORKSPACE) ================
+    -- FRUIT SCAN
     local FRUIT_NAMES = {
         "Rocket","Spin","Chop","Spring","Bomb","Smoke","Spike","Flame","Falcon",
         "Ice","Sand","Dark","Diamond","Light","Rubber","Barrier","Ghost","Magma",
@@ -361,7 +406,6 @@ local function startMain()
         "Pain","Blizzard","Gravity","Mammoth","T-Rex","Dough","Shadow","Venom",
         "Control","Spirit","Dragon","Leopard","Kitsune","Yeti","Gas","Snow","Create"
     }
-
     local function isFruitName(n)
         n = n:lower()
         for _, fn in ipairs(FRUIT_NAMES) do
@@ -369,21 +413,15 @@ local function startMain()
         end
         return false
     end
-
     local function isFruit(obj)
         local cls = obj.ClassName
         if cls == "Tool" and obj:FindFirstChild("Handle") then
             return isFruitName(obj.Name)
         end
-        if cls == "Model" then
-            if isFruitName(obj.Name) then return true end
-        end
-        if cls == "MeshPart" or cls == "Part" then
-            if isFruitName(obj.Name) then return true end
-        end
+        if cls == "Model" and isFruitName(obj.Name) then return true end
+        if (cls == "MeshPart" or cls == "Part") and isFruitName(obj.Name) then return true end
         return false
     end
-
     local function getPart(obj)
         if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
             return obj.Handle, obj.Handle.Position
@@ -392,23 +430,17 @@ local function startMain()
             local p = obj.PrimaryPart or obj:FindFirstChildWhichIsA("BasePart")
             if p then return p, p.Position end
         end
-        if obj:IsA("BasePart") then
-            return obj, obj.Position
-        end
+        if obj:IsA("BasePart") then return obj, obj.Position end
         return nil, nil
     end
 
-    -- Cache fruits - scan mỗi 0.3s
     local fruitCache = {}
     task.spawn(function()
         while Gui.Parent do
             local list = {}
             local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
             if myHRP then
-                -- Scan toàn bộ workspace
-                local ok, all = pcall(function()
-                    return Workspace:GetDescendants()
-                end)
+                local ok, all = pcall(function() return Workspace:GetDescendants() end)
                 if ok and all then
                     for _, obj in ipairs(all) do
                         if isFruit(obj) then
@@ -430,7 +462,6 @@ local function startMain()
         end
     end)
 
-    -- ================ FLY ================
     local function flyTo(target, dt)
         local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
@@ -447,20 +478,23 @@ local function startMain()
         return false
     end
 
-    -- ================ SMART HOP ================
+    -- ⭐ HOP FIX cho lỗi 773
     local isHopping = false
+    local hopFailedAt = 0
 
     local function hop()
-        if isHopping then return false end
+        if isHopping then return end
         isHopping = true
-        vStatus.Text = "Đang tìm server..."
+        vStatus.Text = "Đang lấy server list..."
 
+        -- Queue reload TRƯỚC khi hop
         queueReload()
 
+        -- ⭐ Dùng MAIN_PLACE_ID thay vì game.PlaceId
         local pool = {}
         local ok, data = pcall(function()
             return HttpService:JSONDecode(game:HttpGet(
-                "https://games.roblox.com/v1/games/" .. game.PlaceId ..
+                "https://games.roblox.com/v1/games/" .. MAIN_PLACE_ID ..
                 "/servers/Public?sortOrder=Desc&limit=100"
             ))
         end)
@@ -469,42 +503,54 @@ local function startMain()
             for _, s in ipairs(data.data) do
                 if s.id ~= game.JobId
                    and s.playing < s.maxPlayers
-                   and s.playing >= 5 then  -- có ít nhất 5 người
+                   and s.playing >= 3 then
                     table.insert(pool, {id = s.id, playing = s.playing})
                 end
             end
         end
 
-        -- Shuffle để random
+        if #pool == 0 then
+            vStatus.Text = "❌ Không có server — thử lại 5s"
+            hopFailedAt = tick()
+            task.delay(5, function() isHopping = false end)
+            return
+        end
+
+        -- Shuffle + ưu tiên server đông người
         for i = #pool, 2, -1 do
             local j = math.random(i)
             pool[i], pool[j] = pool[j], pool[i]
         end
+        table.sort(pool, function(a,b) return a.playing > b.playing end)
 
-        -- Ưu tiên server đông
-        table.sort(pool, function(a, b) return a.playing > b.playing end)
+        vStatus.Text = string.format("Hop → %d server", #pool)
 
-        vStatus.Text = string.format("Hop... (%d server)", #pool)
-
+        -- Thử tối đa 3 server
+        local success = false
         for i = 1, math.min(3, #pool) do
-            local ok2 = pcall(function()
-                TeleportService:TeleportToPlaceInstance(game.PlaceId, pool[i].id, LP)
+            local ok2, err = pcall(function()
+                TeleportService:TeleportToPlaceInstance(MAIN_PLACE_ID, pool[i].id, LP)
             end)
             if ok2 then
-                task.delay(5, function() isHopping = false end)
-                return true
+                success = true
+                break
             end
+            task.wait(0.2)
         end
 
-        -- Fallback: teleport ngẫu nhiên
-        pcall(function()
-            TeleportService:Teleport(game.PlaceId, LP)
-        end)
-        task.delay(5, function() isHopping = false end)
-        return true
+        if not success then
+            -- Fallback: teleport về main place (không chỉ định server)
+            vStatus.Text = "Fallback → teleport main place"
+            pcall(function()
+                TeleportService:Teleport(MAIN_PLACE_ID, LP)
+            end)
+        end
+
+        -- Reset sau 10s nếu teleport thất bại
+        task.delay(10, function() isHopping = false end)
     end
 
-    -- ================ KEY EXPIRY CHECK ================
+    -- KEY EXPIRY
     task.spawn(function()
         while true do
             task.wait(5)
@@ -518,12 +564,10 @@ local function startMain()
         end
     end)
 
-    -- ================ MAIN LOOP ================
+    -- MAIN LOOP
     local noFruitTimer = 0
-    local lastHopAttempt = 0
 
     RunService.Heartbeat:Connect(function(dt)
-        -- update stats
         local keyLeft = savedExpire - os.time()
         vHop.Text = tostring(stats.hops)
         vTime.Text = string.format("%dh %dm",
@@ -535,7 +579,6 @@ local function startMain()
 
         local fruits = fruitCache
 
-        -- Kaitun: 20s không có fruit → hop
         if #fruits == 0 then
             vFruit.Text = "None"
             noFruitTimer = noFruitTimer + dt
@@ -575,12 +618,9 @@ local function startMain()
         end
     end)
 
-    print("[DOEAK] ✅ Loaded — running on", game.PlaceId)
+    print("[DOEAK] ✅ Loaded | PlaceId:", game.PlaceId, "| Main:", MAIN_PLACE_ID)
 end
 
--- =========================================================
--- ENTRY
--- =========================================================
 if hasValidKey then
     startMain()
 else
