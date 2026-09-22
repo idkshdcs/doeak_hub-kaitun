@@ -1,6 +1,6 @@
 -- =========================================================
--- DOEAK FRUIT SNIPER v5
--- Auto-reload sau hop • Verify sea • Scan Workspace.Fruit
+-- DOEAK FRUIT SNIPER v6 — KAITUN EDITION
+-- Auto hop • Find fruit • Auto Pirates • No PlaceId check
 -- =========================================================
 
 local Players           = game:GetService("Players")
@@ -15,44 +15,99 @@ local CoreGui           = game:GetService("CoreGui")
 local LP = Players.LocalPlayer
 
 -- =========================================================
--- ⭐ AUTO-RELOAD (2-3 dòng, gọn như script khác)
+-- CONFIG
 -- =========================================================
 local SCRIPT_URL = "https://raw.githubusercontent.com/idkshdcs/doeak_hub-kaitun/main/DoeakFruitSniper.lua"
+local FLY_SPEED  = 170
 
+-- =========================================================
+-- ⭐ DETECT BLOX FRUIT (không dùng PlaceId nữa)
+-- =========================================================
+local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
+local CommF_ = Remotes and Remotes:FindFirstChild("CommF_")
+local GetFruitData = Remotes and Remotes:FindFirstChild("GetFruitData")
+
+-- Detect bằng 3 dấu hiệu:
+-- 1. Có Remotes.CommF_ (chỉ Blox Fruit mới có)
+-- 2. Có Workspace.Fruit folder
+-- 3. Game name chứa "Blox Fruit"
+local isBloxFruit = false
+local detectReason = ""
+
+if CommF_ then
+    isBloxFruit = true
+    detectReason = "Remotes.CommF_ tồn tại"
+elseif Workspace:FindFirstChild("Fruit") then
+    isBloxFruit = true
+    detectReason = "Workspace.Fruit tồn tại"
+elseif game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name:find("Blox Fruit") then
+    isBloxFruit = true
+    detectReason = "Game name match"
+end
+
+if not isBloxFruit then
+    warn("[SNIPER] ❌ Không phải Blox Fruit! Reason: không tìm thấy signature")
+    return
+end
+
+print("[SNIPER] ✅ Đã xác minh Blox Fruit |", detectReason)
+print("[SNIPER] PlaceId:", game.PlaceId, "| JobId:", game.JobId)
+
+-- Detect sea từ map
+local function detectSea()
+    local map = Workspace:FindFirstChild("Map")
+    if not map then return "Unknown" end
+    
+    -- Check NPC đặc trưng
+    local npcs = Workspace:FindFirstChild("NPCs")
+    if npcs then
+        local npcNames = {}
+        for _, n in ipairs(npcs:GetChildren()) do
+            npcNames[n.Name:lower()] = true
+        end
+        -- Sea 3 có NPC đặc trưng
+        if npcNames["hydra"] or npcNames["cursed ship"] or npcNames["haunted castle"] then
+            return "Sea 3"
+        end
+        if npcNames["cafe"] and npcNames["graveyard"] then
+            return "Sea 2"
+        end
+    end
+    
+    -- Fallback theo island
+    local islands = {}
+    for _, c in ipairs(map:GetChildren()) do
+        islands[c.Name:lower()] = true
+    end
+    if islands["castle on the sea"] or islands["haunted castle"] or islands["hydra island"] then
+        return "Sea 3"
+    end
+    if islands["cursed ship"] or islands["graveyard"] or islands["kingdom of rose"] then
+        return "Sea 2"
+    end
+    return "Sea 1"
+end
+
+local currentSea = detectSea()
+print("[SNIPER] Sea detected:", currentSea)
+
+-- =========================================================
+-- ⭐ AUTO-RELOAD SAU HOP
+-- =========================================================
 local function queueReload()
     local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
     if q then
         pcall(function()
             q('loadstring(game:HttpGet("' .. SCRIPT_URL .. '"))()')
         end)
-        print("[SNIPER] ✅ Đã queue script reload sau hop")
+        print("[SNIPER] ✅ Queue auto-reload OK")
+        return true
     end
+    warn("[SNIPER] ⚠️ Executor không hỗ trợ queue_on_teleport")
+    return false
 end
 
--- =========================================================
--- ⭐ VERIFY SEA (chỉ chạy trên Blox Fruit)
--- =========================================================
-local VALID_SEAS = {
-    [2753915549] = "Sea 1",
-    [4442272183] = "Sea 2",
-    [7449423635] = "Sea 3",
-}
-
-local currentSea = VALID_SEAS[game.PlaceId]
-if not currentSea then
-    warn("[SNIPER] ❌ Không phải Blox Fruit! PlaceId:", game.PlaceId)
-    return
-end
-
-print("[SNIPER] ✅ Sea:", currentSea, "| PlaceId:", game.PlaceId)
-
--- Queue reload ngay khi vào server (cho lần hop tiếp theo)
 queueReload()
-
--- =========================================================
--- CONFIG
--- =========================================================
-local FLY_SPEED = 170
 
 -- =========================================================
 -- PARENT
@@ -79,6 +134,7 @@ local C = {
     Gold    = Color3.fromRGB(255, 200, 60),
     Green   = Color3.fromRGB(105, 200, 145),
     Red     = Color3.fromRGB(225, 95, 105),
+    Blue    = Color3.fromRGB(120, 165, 230),
     Text    = Color3.fromRGB(240, 242, 246),
     Sub     = Color3.fromRGB(160, 165, 175),
     Muted   = Color3.fromRGB(100, 105, 115),
@@ -98,28 +154,35 @@ local function stroke(p, col, th, tr)
     s.Parent = p; return s
 end
 local function tween(o, t, props)
-    TweenService:Create(o, TweenInfo.new(t), props):Play()
+    TweenService:Create(o, TweenInfo.new(t, Enum.EasingStyle.Quart), props):Play()
 end
-
--- =========================================================
--- REMOTES
--- =========================================================
-local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
-local CommF_ = Remotes and Remotes:FindFirstChild("CommF_")
-local GetFruitData = Remotes and Remotes:FindFirstChild("GetFruitData")
-
-print("[SNIPER] Remotes:", CommF_ and "OK" or "NIL", GetFruitData and "OK" or "NIL")
+local function addShadow(parent, size, radius)
+    local s = Instance.new("Frame")
+    s.Size = UDim2.new(1, size, 1, size)
+    s.Position = UDim2.new(0, -size/2, 0, -size/2)
+    s.BackgroundColor3 = Color3.new(0,0,0)
+    s.BackgroundTransparency = 0.7
+    s.BorderSizePixel = 0
+    s.ZIndex = -1
+    s.Parent = parent
+    if radius then corner(s, radius) end
+    return s
+end
 
 -- =========================================================
 -- STATE
 -- =========================================================
 local autoSnipe = true
+local kaitunMode = true       -- tự hop khi không có fruit
 local hopCount = 0
 local fruitFound = 0
+local kills = 0
 local isHopping = false
+local noFruitTimer = 0
+local HOP_TIMEOUT = 20        -- 20s không có fruit → hop (kaitun mode)
 
 -- =========================================================
--- TEAM (chỉ join nếu chưa ở Pirates)
+-- TEAM
 -- =========================================================
 local function isInPirates()
     if not LP.Team then return false end
@@ -163,8 +226,8 @@ Gui.DisplayOrder = 100
 pcall(function() Gui.Parent = UIParent end)
 
 local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 460, 0, 320)
-Main.Position = UDim2.new(0.5, -230, 0.5, -160)
+Main.Size = UDim2.new(0, 460, 0, 360)
+Main.Position = UDim2.new(0.5, -230, 0.5, -180)
 Main.BackgroundColor3 = C.Surface
 Main.BorderSizePixel = 0
 Main.Active = true
@@ -172,10 +235,11 @@ Main.Draggable = true
 Main.Parent = Gui
 corner(Main, 16)
 stroke(Main, C.Stroke, 2, 0)
+addShadow(Main, 14, 20)
 
 -- Header
 local MH = Instance.new("Frame")
-MH.Size = UDim2.new(1, -24, 0, 56)
+MH.Size = UDim2.new(1, -24, 0, 60)
 MH.Position = UDim2.new(0, 12, 0, 12)
 MH.BackgroundColor3 = C.Bg
 MH.BorderSizePixel = 0
@@ -187,7 +251,7 @@ local MHTitle = Instance.new("TextLabel")
 MHTitle.Size = UDim2.new(1, -20, 0, 22)
 MHTitle.Position = UDim2.new(0, 12, 0, 8)
 MHTitle.BackgroundTransparency = 1
-MHTitle.Text = "🍎 DOEAK FRUIT SNIPER v5"
+MHTitle.Text = "🍎 DOEAK FRUIT SNIPER v6"
 MHTitle.TextColor3 = C.Text
 MHTitle.Font = Enum.Font.GothamBold
 MHTitle.TextSize = 15
@@ -198,7 +262,7 @@ local MHSub = Instance.new("TextLabel")
 MHSub.Size = UDim2.new(1, -20, 0, 14)
 MHSub.Position = UDim2.new(0, 12, 0, 32)
 MHSub.BackgroundTransparency = 1
-MHSub.Text = "Auto-reload sau hop • Verify sea: " .. currentSea
+MHSub.Text = "Kaitun Mode • " .. currentSea .. " • PlaceId: " .. game.PlaceId
 MHSub.TextColor3 = C.Sub
 MHSub.Font = Enum.Font.Gotham
 MHSub.TextSize = 10
@@ -208,7 +272,7 @@ MHSub.Parent = MH
 -- Fruit info
 local FruitInfo = Instance.new("Frame")
 FruitInfo.Size = UDim2.new(1, -24, 0, 80)
-FruitInfo.Position = UDim2.new(0, 12, 0, 80)
+FruitInfo.Position = UDim2.new(0, 12, 0, 84)
 FruitInfo.BackgroundColor3 = C.Card
 FruitInfo.BorderSizePixel = 0
 FruitInfo.Parent = Main
@@ -248,10 +312,10 @@ FIDist.TextSize = 11
 FIDist.TextXAlignment = Enum.TextXAlignment.Left
 FIDist.Parent = FruitInfo
 
--- Toggle
+-- Toggle Auto Snipe
 local ToggleBtn = Instance.new("TextButton")
-ToggleBtn.Size = UDim2.new(1, -24, 0, 46)
-ToggleBtn.Position = UDim2.new(0, 12, 0, 176)
+ToggleBtn.Size = UDim2.new(0.49, -14, 0, 46)
+ToggleBtn.Position = UDim2.new(0, 12, 0, 180)
 ToggleBtn.BackgroundColor3 = C.Green
 ToggleBtn.Text = ""
 ToggleBtn.AutoButtonColor = false
@@ -260,54 +324,102 @@ corner(ToggleBtn, 10)
 stroke(ToggleBtn, C.Green, 1.5, 0.2)
 
 local TogLbl = Instance.new("TextLabel")
-TogLbl.Size = UDim2.new(1, -80, 1, 0)
-TogLbl.Position = UDim2.new(0, 14, 0, 0)
+TogLbl.Size = UDim2.new(1, -10, 1, 0)
+TogLbl.Position = UDim2.new(0, 10, 0, 0)
 TogLbl.BackgroundTransparency = 1
-TogLbl.Text = "🍎  AUTO SNIPE FRUIT"
+TogLbl.Text = "🍎 SNIPE FRUIT"
 TogLbl.TextColor3 = Color3.fromRGB(20, 40, 28)
 TogLbl.Font = Enum.Font.GothamBold
-TogLbl.TextSize = 12
+TogLbl.TextSize = 11
 TogLbl.TextXAlignment = Enum.TextXAlignment.Left
 TogLbl.Parent = ToggleBtn
-
-local TogStat = Instance.new("TextLabel")
-TogStat.Size = UDim2.new(0, 60, 1, 0)
-TogStat.Position = UDim2.new(1, -70, 0, 0)
-TogStat.BackgroundTransparency = 1
-TogStat.Text = "● ON"
-TogStat.TextColor3 = Color3.fromRGB(20, 40, 28)
-TogStat.Font = Enum.Font.GothamBold
-TogStat.TextSize = 11
-TogStat.Parent = ToggleBtn
 
 ToggleBtn.MouseButton1Click:Connect(function()
     autoSnipe = not autoSnipe
     ToggleBtn.BackgroundColor3 = autoSnipe and C.Green or C.Card
     TogLbl.TextColor3 = autoSnipe and Color3.fromRGB(20, 40, 28) or C.Text
-    TogStat.TextColor3 = autoSnipe and Color3.fromRGB(20, 40, 28) or C.Muted
-    TogStat.Text = autoSnipe and "● ON" or "○ OFF"
+end)
+
+-- Toggle Kaitun
+local KaitunBtn = Instance.new("TextButton")
+KaitunBtn.Size = UDim2.new(0.49, -14, 0, 46)
+KaitunBtn.Position = UDim2.new(0.51, 2, 0, 180)
+KaitunBtn.BackgroundColor3 = C.Green
+KaitunBtn.Text = ""
+KaitunBtn.AutoButtonColor = false
+KaitunBtn.Parent = Main
+corner(KaitunBtn, 10)
+stroke(KaitunBtn, C.Green, 1.5, 0.2)
+
+local KaitunLbl = Instance.new("TextLabel")
+KaitunLbl.Size = UDim2.new(1, -10, 1, 0)
+KaitunLbl.Position = UDim2.new(0, 10, 0, 0)
+KaitunLbl.BackgroundTransparency = 1
+KaitunLbl.Text = "🔁 KAITUN HOP"
+KaitunLbl.TextColor3 = Color3.fromRGB(20, 40, 28)
+KaitunLbl.Font = Enum.Font.GothamBold
+KaitunLbl.TextSize = 11
+KaitunLbl.TextXAlignment = Enum.TextXAlignment.Left
+KaitunLbl.Parent = KaitunBtn
+
+KaitunBtn.MouseButton1Click:Connect(function()
+    kaitunMode = not kaitunMode
+    KaitunBtn.BackgroundColor3 = kaitunMode and C.Green or C.Card
+    KaitunLbl.TextColor3 = kaitunMode and Color3.fromRGB(20, 40, 28) or C.Text
 end)
 
 -- Stats
 local StatsFrame = Instance.new("Frame")
-StatsFrame.Size = UDim2.new(1, -24, 0, 48)
-StatsFrame.Position = UDim2.new(0, 12, 0, 232)
+StatsFrame.Size = UDim2.new(1, -24, 0, 56)
+StatsFrame.Position = UDim2.new(0, 12, 0, 236)
 StatsFrame.BackgroundColor3 = C.Card
 StatsFrame.BorderSizePixel = 0
 StatsFrame.Parent = Main
 corner(StatsFrame, 10)
 stroke(StatsFrame, C.Stroke, 1, 0.5)
 
-local StatsLbl = Instance.new("TextLabel")
-StatsLbl.Size = UDim2.new(1, -20, 1, 0)
-StatsLbl.Position = UDim2.new(0, 12, 0, 0)
-StatsLbl.BackgroundTransparency = 1
-StatsLbl.Text = "Hops: 0 | Fruits: 0 | Team: ---"
-StatsLbl.TextColor3 = C.Text
-StatsLbl.Font = Enum.Font.GothamBold
-StatsLbl.TextSize = 11
-StatsLbl.TextXAlignment = Enum.TextXAlignment.Left
-StatsLbl.Parent = StatsFrame
+local StatsLbl1 = Instance.new("TextLabel")
+StatsLbl1.Size = UDim2.new(1, -20, 0, 22)
+StatsLbl1.Position = UDim2.new(0, 12, 0, 6)
+StatsLbl1.BackgroundTransparency = 1
+StatsLbl1.Text = "Hops: 0 | Fruits: 0 | Kills: 0"
+StatsLbl1.TextColor3 = C.Text
+StatsLbl1.Font = Enum.Font.GothamBold
+StatsLbl1.TextSize = 11
+StatsLbl1.TextXAlignment = Enum.TextXAlignment.Left
+StatsLbl1.Parent = StatsFrame
+
+local StatsLbl2 = Instance.new("TextLabel")
+StatsLbl2.Size = UDim2.new(1, -20, 0, 18)
+StatsLbl2.Position = UDim2.new(0, 12, 0, 30)
+StatsLbl2.BackgroundTransparency = 1
+StatsLbl2.Text = "Team: --- | Status: Idle"
+StatsLbl2.TextColor3 = C.Sub
+StatsLbl2.Font = Enum.Font.Gotham
+StatsLbl2.TextSize = 10
+StatsLbl2.TextXAlignment = Enum.TextXAlignment.Left
+StatsLbl2.Parent = StatsFrame
+
+-- Rejoin button
+local RejoinBtn = Instance.new("TextButton")
+RejoinBtn.Size = UDim2.new(1, -24, 0, 40)
+RejoinBtn.Position = UDim2.new(0, 12, 0, 304)
+RejoinBtn.BackgroundColor3 = C.Card
+RejoinBtn.Text = "🔄  HOP NGAY"
+RejoinBtn.TextColor3 = C.Text
+RejoinBtn.Font = Enum.Font.GothamBold
+RejoinBtn.TextSize = 12
+RejoinBtn.AutoButtonColor = false
+RejoinBtn.Parent = Main
+corner(RejoinBtn, 10)
+stroke(RejoinBtn, C.Stroke, 1.5, 0.3)
+
+RejoinBtn.MouseEnter:Connect(function()
+    tween(RejoinBtn, 0.15, {BackgroundColor3 = C.CardHi})
+end)
+RejoinBtn.MouseLeave:Connect(function()
+    tween(RejoinBtn, 0.15, {BackgroundColor3 = C.Card})
+end)
 
 -- =========================================================
 -- FRUIT DETECTION
@@ -420,18 +532,17 @@ local function flyTo(targetPos, dt)
 end
 
 -- =========================================================
--- HOP
+-- HOP SERVER
 -- =========================================================
 local function hopServer()
     if isHopping then return end
     isHopping = true
+    
+    StatsLbl2.Text = "Team: " .. (LP.Team and LP.Team.Name or "---") .. " | Status: Hopping..."
+    print("[SNIPER] 🚀 Hop server...")
 
-    print("[SNIPER] Hop server...")
-
-    -- Queue reload trước khi hop
     queueReload()
 
-    -- Tìm server
     local servers
     local ok = pcall(function()
         servers = HttpService:JSONDecode(game:HttpGet(
@@ -449,7 +560,7 @@ local function hopServer()
         end
         if #list > 0 then
             local pick = list[math.random(1, #list)]
-            print("[SNIPER] Teleport tới:", pick)
+            print("[SNIPER] ➡️ Teleport:", pick)
             pcall(function()
                 TeleportService:TeleportToPlaceInstance(game.PlaceId, pick, LP)
             end)
@@ -457,9 +568,14 @@ local function hopServer()
         end
     end
 
-    -- Fallback
+    print("[SNIPER] ➡️ Random teleport")
     pcall(function() TeleportService:Teleport(game.PlaceId, LP) end)
 end
+
+RejoinBtn.MouseButton1Click:Connect(function()
+    hopCount = hopCount + 1
+    hopServer()
+end)
 
 -- =========================================================
 -- MAIN LOOP
@@ -468,28 +584,49 @@ local lastLog = 0
 
 RunService.Heartbeat:Connect(function(dt)
     local teamName = LP.Team and LP.Team.Name or "---"
-    StatsLbl.Text = string.format("Hops: %d | Fruits: %d | Team: %s",
-        hopCount, fruitFound, teamName)
-
+    StatsLbl1.Text = string.format("Hops: %d | Fruits: %d | Kills: %d",
+        hopCount, fruitFound, kills)
+    
     if not autoSnipe or isHopping then return end
 
     local fruits = getFruits()
 
+    -- Update status
+    if #fruits > 0 then
+        StatsLbl2.Text = string.format("Team: %s | Status: Farming fruit", teamName)
+        noFruitTimer = 0
+    else
+        noFruitTimer = noFruitTimer + dt
+        if kaitunMode and noFruitTimer > 0 and noFruitTimer < HOP_TIMEOUT then
+            StatsLbl2.Text = string.format("Team: %s | Status: Chờ fruit... %.0fs", teamName, noFruitTimer)
+        end
+    end
+
+    -- Log mỗi 2s
     local now = tick()
     if now - lastLog >= 2 then
         lastLog = now
         local folder = Workspace:FindFirstChild("Fruit")
-        print(string.format("[SNIPER] Fruit folder: %s | Fruits found: %d",
+        print(string.format("[SNIPER] Fruit folder: %s | Found: %d | Sea: %s",
             folder and (#folder:GetChildren() .. " children") or "NIL",
-            #fruits))
+            #fruits, currentSea))
     end
 
+    -- Không có fruit
     if #fruits == 0 then
         FIName.Text = "Không có fruit"
-        FIDist.Text = "Distance: ---"
+        FIDist.Text = string.format("Chờ %.0f/%ds để hop", noFruitTimer, HOP_TIMEOUT)
+        
+        -- Kaitun mode: hop sau HOP_TIMEOUT
+        if kaitunMode and noFruitTimer >= HOP_TIMEOUT then
+            noFruitTimer = 0
+            hopCount = hopCount + 1
+            hopServer()
+        end
         return
     end
 
+    -- Có fruit → bay tới
     local target = fruits[1]
     FIName.Text = target.Name
     FIDist.Text = string.format("Distance: %.0f studs", target.Distance)
@@ -511,7 +648,7 @@ RunService.Heartbeat:Connect(function(dt)
 
         if not target.Obj.Parent or (target.Part and not target.Part.Parent) then
             fruitFound = fruitFound + 1
-            print("[SNIPER] ✅ Nhặt được:", target.Name, "| Total:", fruitFound)
+            print("[SNIPER] ✅ Nhặt:", target.Name, "| Total:", fruitFound)
             task.wait(0.5)
             hopCount = hopCount + 1
             hopServer()
@@ -523,10 +660,10 @@ end)
 -- NOTIFY
 -- =========================================================
 local note = Instance.new("TextLabel")
-note.Size = UDim2.new(0, 320, 0, 40)
-note.Position = UDim2.new(0.5, -160, 0, 40)
+note.Size = UDim2.new(0, 340, 0, 44)
+note.Position = UDim2.new(0.5, -170, 0, 40)
 note.BackgroundColor3 = C.Card
-note.Text = "  ✅ Fruit Sniper v5 loaded — " .. currentSea
+note.Text = "  ✅ Fruit Sniper v6 loaded — " .. currentSea
 note.TextColor3 = C.Green
 note.Font = Enum.Font.GothamBold
 note.TextSize = 12
@@ -534,9 +671,9 @@ note.BorderSizePixel = 0
 note.Parent = Gui
 corner(note, 10)
 stroke(note, C.Green, 1.5, 0.2)
-task.delay(3, function()
+task.delay(4, function()
     tween(note, 0.4, {BackgroundTransparency = 1, TextTransparency = 1})
     task.wait(0.5); note:Destroy()
 end)
 
-print("[SNIPER] ✅ Loaded | Sea:", currentSea, "| PlaceId:", game.PlaceId)
+print("[SNIPER] ✅ Loaded v6 | Sea:", currentSea, "| PlaceId:", game.PlaceId)
