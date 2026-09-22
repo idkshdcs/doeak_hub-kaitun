@@ -1,47 +1,43 @@
 -- =========================================================
--- DOEAK - KAITUN FRUIT v7
--- Bỏ verify sea • Key 24h lưu file • UI trắng-xám
+-- DOEAK - KAITUN FRUIT v8
+-- Fix LocalPlayer nil • Full workspace scan • Smart hop
 -- =========================================================
 
-local Players           = game:GetService("Players")
+-- ⭐ CHỜ PLAYER LOAD XONG (fix lỗi Character nil)
+local Players = game:GetService("Players")
+local LP
+repeat
+    LP = Players.LocalPlayer
+    task.wait(0.1)
+until LP ~= nil
+
 local RunService        = game:GetService("RunService")
 local TeleportService   = game:GetService("TeleportService")
 local TweenService      = game:GetService("TweenService")
+local HttpService       = game:GetService("HttpService")
 local Workspace         = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui           = game:GetService("CoreGui")
 
-local LP = Players.LocalPlayer
+-- Chờ character load
+repeat task.wait(0.1) until LP.Character ~= nil
 
--- =========================================================
--- CONFIG
--- =========================================================
 local SCRIPT_URL  = "https://raw.githubusercontent.com/idkshdcs/doeak_hub-kaitun/main/DoeakFruitSniper.lua"
 local FLY_SPEED   = 170
 local HOP_TIMEOUT = 20
 local KEY_FILE    = "doeak_key.txt"
-local SESSION     = 24 * 3600  -- 24 giờ
+local SESSION     = 24 * 3600
 
--- Key hợp lệ
 local VALID_KEYS = {
     ["DOEAK-VIP-2026"]   = true,
     ["KAITUN-FREE-2026"] = true,
     ["DOEAK-KAITUN"]     = true,
     ["FREE-2026"]        = true,
-    ["DOEAK-HUB:36"]     = true,
 }
 
 -- =========================================================
--- UTILS
+-- KEY FILE
 -- =========================================================
-local function fmtTime(sec)
-    sec = math.max(0, math.floor(sec))
-    local h = math.floor(sec / 3600)
-    local m = math.floor((sec % 3600) / 60)
-    if h > 0 then return h .. "h " .. m .. "m" end
-    return m .. "m " .. (sec % 60) .. "s"
-end
-
 local function readKeyFile()
     local ok, data = pcall(readfile, KEY_FILE)
     if not ok or not data then return nil, 0 end
@@ -54,9 +50,6 @@ local function writeKeyFile(k, e)
     pcall(writefile, KEY_FILE, k .. "|" .. tostring(e))
 end
 
--- =========================================================
--- CHECK KEY
--- =========================================================
 local savedKey, savedExpire = readKeyFile()
 local hasValidKey = savedKey and VALID_KEYS[savedKey] and savedExpire > os.time()
 
@@ -75,7 +68,6 @@ for _, n in ipairs({"DoeakKeyUI", "DoeakMainUI"}) do
     if o then o:Destroy() end
 end
 
--- Colors
 local C = {
     Surface = Color3.fromRGB(45, 45, 52),
     Card    = Color3.fromRGB(58, 58, 65),
@@ -143,22 +135,22 @@ local function showKeyUI()
     sub.Size = UDim2.new(1, -20, 0, 16)
     sub.Position = UDim2.new(0, 10, 0, 48)
     sub.BackgroundTransparency = 1
-    sub.Text = "Nhập key để sử dụng (24h)"
+    sub.Text = "Nhập key (24h)"
     sub.TextColor3 = C.Sub
     sub.Font = Enum.Font.Gotham
     sub.TextSize = 11
     sub.TextXAlignment = Enum.TextXAlignment.Center
     sub.Parent = F
 
-    local InputFrame = Instance.new("Frame")
-    InputFrame.Size = UDim2.new(1, -40, 0, 44)
-    InputFrame.Position = UDim2.new(0, 20, 0, 84)
-    InputFrame.BackgroundColor3 = C.Bg
-    InputFrame.BackgroundTransparency = 0.3
-    InputFrame.BorderSizePixel = 0
-    InputFrame.Parent = F
-    corner(InputFrame, 10)
-    stroke(InputFrame, C.White, 1, 0.3)
+    local IF = Instance.new("Frame")
+    IF.Size = UDim2.new(1, -40, 0, 44)
+    IF.Position = UDim2.new(0, 20, 0, 84)
+    IF.BackgroundColor3 = C.Bg
+    IF.BackgroundTransparency = 0.3
+    IF.BorderSizePixel = 0
+    IF.Parent = F
+    corner(IF, 10)
+    stroke(IF, C.White, 1, 0.3)
 
     local Box = Instance.new("TextBox")
     Box.Size = UDim2.new(1, -20, 1, 0)
@@ -171,21 +163,21 @@ local function showKeyUI()
     Box.Font = Enum.Font.Gotham
     Box.TextSize = 13
     Box.ClearTextOnFocus = false
-    Box.Parent = InputFrame
+    Box.Parent = IF
 
-    local SubmitBtn = Instance.new("TextButton")
-    SubmitBtn.Size = UDim2.new(1, -40, 0, 44)
-    SubmitBtn.Position = UDim2.new(0, 20, 0, 140)
-    SubmitBtn.BackgroundColor3 = C.Card
-    SubmitBtn.BackgroundTransparency = 0.1
-    SubmitBtn.Text = "XÁC NHẬN"
-    SubmitBtn.TextColor3 = C.Text
-    SubmitBtn.Font = Enum.Font.GothamBold
-    SubmitBtn.TextSize = 14
-    SubmitBtn.AutoButtonColor = false
-    SubmitBtn.Parent = F
-    corner(SubmitBtn, 10)
-    stroke(SubmitBtn, C.White, 1.5, 0.3)
+    local SB = Instance.new("TextButton")
+    SB.Size = UDim2.new(1, -40, 0, 44)
+    SB.Position = UDim2.new(0, 20, 0, 140)
+    SB.BackgroundColor3 = C.Card
+    SB.BackgroundTransparency = 0.1
+    SB.Text = "XÁC NHẬN"
+    SB.TextColor3 = C.Text
+    SB.Font = Enum.Font.GothamBold
+    SB.TextSize = 14
+    SB.AutoButtonColor = false
+    SB.Parent = F
+    corner(SB, 10)
+    stroke(SB, C.White, 1.5, 0.3)
 
     local Status = Instance.new("TextLabel")
     Status.Size = UDim2.new(1, -40, 0, 20)
@@ -197,7 +189,7 @@ local function showKeyUI()
     Status.TextSize = 11
     Status.Parent = F
 
-    SubmitBtn.MouseButton1Click:Connect(function()
+    SB.MouseButton1Click:Connect(function()
         local entered = Box.Text
         if entered == "" then
             Status.Text = "Chưa nhập key"
@@ -206,10 +198,11 @@ local function showKeyUI()
         end
         if VALID_KEYS[entered] then
             writeKeyFile(entered, os.time() + SESSION)
-            Status.Text = "✅ Key hợp lệ — đang khởi động..."
+            Status.Text = "✅ OK — khởi động..."
             Status.TextColor3 = C.Green
             task.wait(0.8)
             Gui:Destroy()
+            -- queue reload
             local q = queue_on_teleport or queueonteleport or (syn and syn.queue_on_teleport)
             if q then
                 pcall(function()
@@ -218,7 +211,7 @@ local function showKeyUI()
             end
             loadstring(game:HttpGet(SCRIPT_URL))()
         else
-            Status.Text = "❌ Key sai hoặc hết hạn"
+            Status.Text = "❌ Key sai"
             Status.TextColor3 = C.Red
         end
     end)
@@ -233,7 +226,7 @@ local function startMain()
     local Remotes = ReplicatedStorage:FindFirstChild("Remotes")
     local CommF_ = Remotes and Remotes:FindFirstChild("CommF_")
 
-    -- Stats persist
+    -- Stats persist qua các server
     local genv = getgenv and getgenv() or _G
     if not genv.DoeakStats then
         genv.DoeakStats = {hops = 0, fruits = 0}
@@ -250,7 +243,7 @@ local function startMain()
     end
     queueReload()
 
-    -- Team Pirates (không join lại nếu đã ở Pirates)
+    -- Team Pirates
     local function isInPirates()
         if not LP.Team then return false end
         local n = LP.Team.Name:lower()
@@ -279,7 +272,7 @@ local function startMain()
         end
     end)
 
-    -- UI
+    -- ================ UI ================
     local Gui = Instance.new("ScreenGui")
     Gui.Name = "DoeakMainUI"
     Gui.ResetOnSpawn = false
@@ -288,7 +281,7 @@ local function startMain()
     pcall(function() Gui.Parent = UIParent end)
 
     local Main = Instance.new("Frame")
-    Main.Size = UDim2.new(0, 340, 0, 240)
+    Main.Size = UDim2.new(0, 340, 0, 220)
     Main.Position = UDim2.new(0, 20, 0.3, 0)
     Main.BackgroundColor3 = C.Surface
     Main.BackgroundTransparency = 0.15
@@ -299,7 +292,6 @@ local function startMain()
     corner(Main, 16)
     stroke(Main, C.White, 2, 0)
 
-    -- Title
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -20, 0, 26)
     title.Position = UDim2.new(0, 10, 0, 14)
@@ -311,7 +303,6 @@ local function startMain()
     title.TextXAlignment = Enum.TextXAlignment.Center
     title.Parent = Main
 
-    -- Divider
     local div = Instance.new("Frame")
     div.Size = UDim2.new(1, -28, 0, 1)
     div.Position = UDim2.new(0, 14, 0, 48)
@@ -320,7 +311,6 @@ local function startMain()
     div.BorderSizePixel = 0
     div.Parent = Main
 
-    -- Info rows
     local function makeRow(y, label)
         local lbl = Instance.new("TextLabel")
         lbl.Size = UDim2.new(0.5, -10, 0, 22)
@@ -351,44 +341,19 @@ local function startMain()
     local vTime  = makeRow(110, "Time:")
     local vKey   = makeRow(136, "Key:")
 
-    -- Buttons
-    local AutoBtn = Instance.new("TextButton")
-    AutoBtn.Size = UDim2.new(0.5, -14, 0, 40)
-    AutoBtn.Position = UDim2.new(0, 14, 0, 176)
-    AutoBtn.BackgroundColor3 = C.Green
-    AutoBtn.BackgroundTransparency = 0.1
-    AutoBtn.Text = "AUTO: ON"
-    AutoBtn.TextColor3 = Color3.fromRGB(20, 40, 28)
-    AutoBtn.Font = Enum.Font.GothamBold
-    AutoBtn.TextSize = 12
-    AutoBtn.AutoButtonColor = false
-    AutoBtn.Parent = Main
-    corner(AutoBtn, 10)
-    stroke(AutoBtn, C.White, 1.5, 0.4)
+    -- Status
+    local vStatus = Instance.new("TextLabel")
+    vStatus.Size = UDim2.new(1, -28, 0, 18)
+    vStatus.Position = UDim2.new(0, 14, 0, 162)
+    vStatus.BackgroundTransparency = 1
+    vStatus.Text = "Đang khởi động..."
+    vStatus.TextColor3 = C.Sub
+    vStatus.Font = Enum.Font.Gotham
+    vStatus.TextSize = 11
+    vStatus.TextXAlignment = Enum.TextXAlignment.Center
+    vStatus.Parent = Main
 
-    local HopBtn = Instance.new("TextButton")
-    HopBtn.Size = UDim2.new(0.5, -14, 0, 40)
-    HopBtn.Position = UDim2.new(0.5, 0, 0, 176)
-    HopBtn.BackgroundColor3 = C.Card
-    HopBtn.BackgroundTransparency = 0.1
-    HopBtn.Text = "HOP NGAY"
-    HopBtn.TextColor3 = C.Text
-    HopBtn.Font = Enum.Font.GothamBold
-    HopBtn.TextSize = 12
-    HopBtn.AutoButtonColor = false
-    HopBtn.Parent = Main
-    corner(HopBtn, 10)
-    stroke(HopBtn, C.White, 1.5, 0.4)
-
-    local autoSnipe = true
-    AutoBtn.MouseButton1Click:Connect(function()
-        autoSnipe = not autoSnipe
-        AutoBtn.BackgroundColor3 = autoSnipe and C.Green or C.Card
-        AutoBtn.Text = autoSnipe and "AUTO: ON" or "AUTO: OFF"
-        AutoBtn.TextColor3 = autoSnipe and Color3.fromRGB(20, 40, 28) or C.Text
-    end)
-
-    -- Fruit detection
+    -- ================ FRUIT SCAN (FULL WORKSPACE) ================
     local FRUIT_NAMES = {
         "Rocket","Spin","Chop","Spring","Bomb","Smoke","Spike","Flame","Falcon",
         "Ice","Sand","Dark","Diamond","Light","Rubber","Barrier","Ghost","Magma",
@@ -396,22 +361,30 @@ local function startMain()
         "Pain","Blizzard","Gravity","Mammoth","T-Rex","Dough","Shadow","Venom",
         "Control","Spirit","Dragon","Leopard","Kitsune","Yeti","Gas","Snow","Create"
     }
+
     local function isFruitName(n)
         n = n:lower()
         for _, fn in ipairs(FRUIT_NAMES) do
-            if n == fn:lower() or n:find(fn:lower(), 1, true) then return true end
+            if n == fn:lower() then return true end
         end
         return false
     end
+
     local function isFruit(obj)
-        if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
+        local cls = obj.ClassName
+        if cls == "Tool" and obj:FindFirstChild("Handle") then
             return isFruitName(obj.Name)
         end
-        if obj:IsA("Model") and isFruitName(obj.Name) then return true end
-        if (obj:IsA("MeshPart") or obj:IsA("Part")) and isFruitName(obj.Name) then return true end
+        if cls == "Model" then
+            if isFruitName(obj.Name) then return true end
+        end
+        if cls == "MeshPart" or cls == "Part" then
+            if isFruitName(obj.Name) then return true end
+        end
         return false
     end
-    local function getFruitPosition(obj)
+
+    local function getPart(obj)
         if obj:IsA("Tool") and obj:FindFirstChild("Handle") then
             return obj.Handle, obj.Handle.Position
         end
@@ -424,31 +397,40 @@ local function startMain()
         end
         return nil, nil
     end
-    local function getFruits()
-        local result = {}
-        if not LP.Character then return result end
-        local myHRP = LP.Character:FindFirstChild("HumanoidRootPart")
-        if not myHRP then return result end
 
-        local f = Workspace:FindFirstChild("Fruit")
-        if f then
-            for _, obj in ipairs(f:GetChildren()) do
-                if isFruit(obj) then
-                    local p, pos = getFruitPosition(obj)
-                    if pos then
-                        local d = (myHRP.Position - pos).Magnitude
-                        table.insert(result, {
-                            Obj = obj, Name = obj.Name, Distance = d,
-                            Position = pos, Part = p
-                        })
+    -- Cache fruits - scan mỗi 0.3s
+    local fruitCache = {}
+    task.spawn(function()
+        while Gui.Parent do
+            local list = {}
+            local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if myHRP then
+                -- Scan toàn bộ workspace
+                local ok, all = pcall(function()
+                    return Workspace:GetDescendants()
+                end)
+                if ok and all then
+                    for _, obj in ipairs(all) do
+                        if isFruit(obj) then
+                            local p, pos = getPart(obj)
+                            if pos then
+                                local d = (myHRP.Position - pos).Magnitude
+                                table.insert(list, {
+                                    Obj = obj, Name = obj.Name, Distance = d,
+                                    Position = pos, Part = p
+                                })
+                            end
+                        end
                     end
                 end
+                table.sort(list, function(a,b) return a.Distance < b.Distance end)
             end
+            fruitCache = list
+            task.wait(0.3)
         end
-        table.sort(result, function(a,b) return a.Distance < b.Distance end)
-        return result
-    end
+    end)
 
+    -- ================ FLY ================
     local function flyTo(target, dt)
         local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
@@ -461,27 +443,68 @@ local function startMain()
         local step = math.min(FLY_SPEED * dt, dist)
         hrp.CFrame = CFrame.new(hrp.Position + dir.Unit * step)
         hrp.Velocity = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
         return false
     end
 
+    -- ================ SMART HOP ================
     local isHopping = false
-    local noFruitTimer = 0
 
-    local function hopServer()
-        if isHopping then return end
+    local function hop()
+        if isHopping then return false end
         isHopping = true
+        vStatus.Text = "Đang tìm server..."
+
         queueReload()
+
+        local pool = {}
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(
+                "https://games.roblox.com/v1/games/" .. game.PlaceId ..
+                "/servers/Public?sortOrder=Desc&limit=100"
+            ))
+        end)
+
+        if ok and data and data.data then
+            for _, s in ipairs(data.data) do
+                if s.id ~= game.JobId
+                   and s.playing < s.maxPlayers
+                   and s.playing >= 5 then  -- có ít nhất 5 người
+                    table.insert(pool, {id = s.id, playing = s.playing})
+                end
+            end
+        end
+
+        -- Shuffle để random
+        for i = #pool, 2, -1 do
+            local j = math.random(i)
+            pool[i], pool[j] = pool[j], pool[i]
+        end
+
+        -- Ưu tiên server đông
+        table.sort(pool, function(a, b) return a.playing > b.playing end)
+
+        vStatus.Text = string.format("Hop... (%d server)", #pool)
+
+        for i = 1, math.min(3, #pool) do
+            local ok2 = pcall(function()
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, pool[i].id, LP)
+            end)
+            if ok2 then
+                task.delay(5, function() isHopping = false end)
+                return true
+            end
+        end
+
+        -- Fallback: teleport ngẫu nhiên
         pcall(function()
             TeleportService:Teleport(game.PlaceId, LP)
         end)
+        task.delay(5, function() isHopping = false end)
+        return true
     end
 
-    HopBtn.MouseButton1Click:Connect(function()
-        stats.hops = stats.hops + 1
-        hopServer()
-    end)
-
-    -- Check key hết hạn
+    -- ================ KEY EXPIRY CHECK ================
     task.spawn(function()
         while true do
             task.wait(5)
@@ -495,24 +518,33 @@ local function startMain()
         end
     end)
 
-    -- Main loop
+    -- ================ MAIN LOOP ================
+    local noFruitTimer = 0
+    local lastHopAttempt = 0
+
     RunService.Heartbeat:Connect(function(dt)
+        -- update stats
         local keyLeft = savedExpire - os.time()
         vHop.Text = tostring(stats.hops)
-        vTime.Text = fmtTime(keyLeft)
+        vTime.Text = string.format("%dh %dm",
+            math.floor(keyLeft / 3600),
+            math.floor((keyLeft % 3600) / 60))
         vKey.Text = savedKey and savedKey:sub(1, 12) .. "..." or "---"
 
-        if not autoSnipe or isHopping then return end
+        if isHopping then return end
 
-        local fruits = getFruits()
+        local fruits = fruitCache
 
+        -- Kaitun: 20s không có fruit → hop
         if #fruits == 0 then
             vFruit.Text = "None"
             noFruitTimer = noFruitTimer + dt
+            vStatus.Text = string.format("Chờ fruit... %.0fs / 20s", noFruitTimer)
+
             if noFruitTimer >= HOP_TIMEOUT then
                 noFruitTimer = 0
                 stats.hops = stats.hops + 1
-                hopServer()
+                hop()
             end
             return
         end
@@ -520,27 +552,30 @@ local function startMain()
         noFruitTimer = 0
         local target = fruits[1]
         vFruit.Text = target.Name
+        vStatus.Text = string.format("Farming %s (%.0f)", target.Name, target.Distance)
 
         local reached = flyTo(target.Position, dt)
         if reached then
-            pcall(function()
-                local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                if hrp and target.Part and target.Part.Parent then
+            local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+            if hrp and target.Part and target.Part.Parent then
+                pcall(function()
                     target.Part.CFrame = hrp.CFrame * CFrame.new(0, 0, -2)
                     firetouchinterest(hrp, target.Part, 0)
                     task.wait(0.05)
                     firetouchinterest(hrp, target.Part, 1)
-                end
-            end)
+                end)
+            end
             task.wait(0.3)
             if not target.Obj.Parent or (target.Part and not target.Part.Parent) then
                 stats.fruits = stats.fruits + 1
                 task.wait(0.5)
                 stats.hops = stats.hops + 1
-                hopServer()
+                hop()
             end
         end
     end)
+
+    print("[DOEAK] ✅ Loaded — running on", game.PlaceId)
 end
 
 -- =========================================================
